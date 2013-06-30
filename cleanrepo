@@ -1,0 +1,84 @@
+#! /bin/bash
+#
+
+echo() {
+  builtin echo -e "$@"
+}
+
+remote_name='origin'
+
+current_timestamp=$(date +%s)
+
+age_threshold=15 #days
+
+# COLORS
+RED='\033[1;31m'
+WHITE='\033[1;37m'
+CYAN='\033[4;36m'
+MAGENTA='\033[0;35m'
+YELLOW='\033[0;33m'
+ENDCOLOR='\033[0m'
+SEP="${WHITE}|${ENDCOLOR}"
+LOG_FORMAT="${CYAN}%h${ENDCOLOR} ${SEP} %s ${SEP} ${YELLOW}%an <%ae>${ENDCOLOR}"
+
+delete_branch() {
+  echo "\n  ${RED}Deleting branch ${WHITE}$1${ENDCOLOR} from ${WHITE}$remote_name${ENDCOLOR}"
+  git push $remote_name :$branch_name
+}
+
+show_all_commits() {
+  echo ""
+  data=$(git log -20 $remote_name/$1 --pretty=oneline --format="  $LOG_FORMAT")
+  echo "$data" | less -R
+}
+
+show_branch() {
+  branch_timestamp=$(git log -1 $entry --format='%ct')
+  branch_sha=$(git log -1 $entry --format='%H')
+
+  let "age=$current_timestamp - $branch_timestamp"
+  let "age_in_days=$age / 60 / 60 / 24"
+
+  if [ $age_in_days -ge $age_threshold ] ; then
+    branch_name=$(awk -F'[\/]' '{ print $(NF) }' <<< $entry)
+
+    # Merged / Unmerged
+    merge_base=$(git merge-base $entry $remote_name/master)
+    
+    # == means completely merged,  
+    if [ $merge_base == $branch_sha ]; then
+      branch_type="MERGED FEATURE"
+      branch_color=$MAGENTA
+    else
+      branch_type="ABANDONED BRANCH"
+      branch_color=$YELLOW
+    fi
+
+    # Get branch's last commit
+    commit_data=$(git log -3 $entry --pretty=oneline --format="  $LOG_FORMAT")
+    echo "\n$branch_color $branch_type${ENDCOLOR} ${WHITE}$branch_name ${SEP} last commit: $age_in_days days ago"
+    echo "$commit_data"
+
+    echo ""
+    echo "  a) Delete the branch"
+    echo "  b) Show last 20 commits in the branch"
+    echo "  c) Nothing"
+    echo ""
+    read -p "  What do you want to do? (default: c) " -n 1 action </dev/tty
+
+    case "$action" in
+      a|A) delete_branch $branch_name;; 
+      b|B) show_all_commits $branch_name; show_branch ;;
+      *) ;;
+    esac
+  fi
+}
+
+#################################################################
+# Remote branches that are older than the age threshold
+#################################################################
+git for-each-ref refs/remotes/$remote_name --sort='committerdate' --format='%(refname)' | awk -F'[\/]' '!/HEAD|master/ { print $(0) }' | \
+  while read entry
+  do
+    show_branch
+  done
