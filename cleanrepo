@@ -5,11 +5,36 @@ echo() {
   builtin echo -e "$@"
 }
 
+show_help() {
+  echo "Usage:  cleanrepo -d [num]"
+  echo "  -d [num]\t\tNumber of days threshold"
+  echo "  -h\t\t\tThis help"
+}
+
 remote_name='origin'
 
 current_timestamp=$(date +%s)
 
 age_threshold=15 #days
+
+
+### Parse command line options
+while getopts "hd:" opt; do
+  case $opt in
+    h|\?)
+      show_help
+      exit 0
+      ;;
+
+    d)
+      age_threshold=$OPTARG
+      ;;
+    ?)
+      echo "Invalid option: -$OPTARG" >&2
+      exit 1;
+      ;;
+  esac
+done
 
 # COLORS
 RED='\033[1;31m'
