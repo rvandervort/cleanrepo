@@ -8,10 +8,14 @@ echo() {
 show_help() {
   echo "Usage:  cleanrepo -d [num]"
   echo "  -d [num]\t\tNumber of days threshold"
+  echo "  -b [branch]\t\tTrunk branch name (default: master)"
+  echo "  -r [remote]\t\tRemote name (default: origin)"
   echo "  -h\t\t\tThis help"
+
 }
 
 remote_name='origin'
+trunk_branch_name='mainline'
 
 current_timestamp=$(date +%s)
 
@@ -19,7 +23,7 @@ age_threshold=15 #days
 
 
 ### Parse command line options
-while getopts "hd:" opt; do
+while getopts "h:d:b:r:" opt; do
   case $opt in
     h|\?)
       show_help
@@ -29,6 +33,12 @@ while getopts "hd:" opt; do
     d)
       age_threshold=$OPTARG
       ;;
+    b)
+      trunk_branch_name=$OPTARG
+      ;;
+    r)
+      remote_name=$OPTARG
+      ;;      
     ?)
       echo "Invalid option: -$OPTARG" >&2
       exit 1;
@@ -39,12 +49,13 @@ done
 # COLORS
 RED='\033[1;31m'
 WHITE='\033[1;37m'
-CYAN='\033[4;36m'
+CYAN_UNDERLINED='\033[4;36m'
+CYAN='\033[0;36m'
 MAGENTA='\033[0;35m'
 YELLOW='\033[0;33m'
 ENDCOLOR='\033[0m'
 SEP="${WHITE}|${ENDCOLOR}"
-LOG_FORMAT="${CYAN}%h${ENDCOLOR} ${SEP} %s ${SEP} ${YELLOW}%an <%ae>${ENDCOLOR}"
+LOG_FORMAT="${CYAN_UNDERLINED}%h${ENDCOLOR} ${SEP} %s ${SEP} ${YELLOW}%an <%ae>${ENDCOLOR}"
 
 delete_branch() {
   echo "\n  ${RED}Deleting branch ${WHITE}$1${ENDCOLOR} from ${WHITE}$remote_name${ENDCOLOR}"
@@ -68,7 +79,7 @@ show_branch() {
     branch_name=$(awk -F'[\/]' '{ print $(NF) }' <<< $entry)
 
     # Merged / Unmerged
-    merge_base=$(git merge-base $entry $remote_name/master)
+    merge_base=$(git merge-base $entry $remote_name/$trunk_branch_name)
     
     # == means completely merged,  
     if [ $merge_base == $branch_sha ]; then
@@ -102,7 +113,12 @@ show_branch() {
 #################################################################
 # Remote branches that are older than the age threshold
 #################################################################
-git for-each-ref refs/remotes/$remote_name --sort='committerdate' --format='%(refname)' | awk -F'[\/]' '!/HEAD|master/ { print $(0) }' | \
+echo "Fetch branches from [${CYAN}REMOTE: ${YELLOW}$remote_name${ENDCOLOR}]"
+git fetch $remote_name
+
+echo "Comparing feature branches from [${CYAN}REMOTE: ${YELLOW}$remote_name${ENDCOLOR}] to [${CYAN}BRANCH: ${YELLOW}$trunk_branch_name${ENDCOLOR}]\n"
+echo "=============================================================================================="
+git for-each-ref refs/remotes/$remote_name --sort='committerdate' --format='%(refname)' | awk -F'[\/]' '!/HEAD|$trunk_branch_name/ { print $(0) }' | \
   while read entry
   do
     show_branch
